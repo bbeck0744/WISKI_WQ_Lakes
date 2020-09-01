@@ -43,15 +43,31 @@ WQ_df = pd.DataFrame(WQ)
 data_merge = pd.merge(WQ_df, sites_df, on="station_no", how="left")
 
 #data processing to obtain lake total phosphorus, clarity (SD), and algae (chl-a)
-data_merge['site_no_parameter'] = data_merge['parametertype_name'] + '-' + data_merge['station_name_x']
+data_merge['station_no_parameter'] = data_merge['station_no'] + '-' + data_merge['parametertype_name']  
 WQ_subset = data_merge[(data_merge["parametertype_name"] == "TP") | (data_merge["parametertype_name"] == "SD") | (data_merge["parametertype_name"] == "ChlA")]
 
 #calculate annual averages
-Annual_avg = WQ_subset.groupby("site_no_parameter").mean()
+result = WQ_subset.groupby('station_no_parameter', as_index=False).mean()
+
+#iterate through keys to find original lake names and lab analysis unit values
+units = []
+lake_name = []
+
+for i in result.station_no_parameter:
+    units.append(WQ_subset['unit_symbol'][WQ_subset['station_no_parameter'] == i].iloc[0])
+    lake_name.append(WQ_subset['station_name_y'][WQ_subset['station_no_parameter'] == i].iloc[0])
+result.insert(2, 'unit_symbol', units)
+result.insert(1, 'station_name_y', lake_name)
+
+#split the parameter and lake ID to create lake id and parameter columns
+split_data = result.station_no_parameter.str.split('-', expand=True).rename({0: 'Site', 1: 'Parameter'}, axis=1)
+
+#combine the split columns and result dataframe
+wq_combined = pd.concat([split_data, result], axis=1)
 
 #Convert coordinates  into point data for GIS processing
-Annual_avg['coordinates'] = Annual_avg[['station_longitude', 'station_latitude']].values.tolist()
-Annual_avg['coordinates'] = Annual_avg['coordinates'].apply(Point)
-Annual_avg = geopandas.GeoDataFrame(Annual_avg, geometry='coordinates')
+wq_combined['coordinates'] = wq_combined[['station_longitude', 'station_latitude']].values.tolist()
+wq_combined['coordinates'] = wq_combined['coordinates'].apply(Point)
+Lake_WQ_Data = geopandas.GeoDataFrame(wq_combined, geometry='coordinates')
 
-Annual_avg
+
